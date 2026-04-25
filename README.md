@@ -15,7 +15,7 @@ Esta integración personalizada permite controlar las pantallas LED **Twinstar L
 * **Servicios Avanzados:**
     * `send_command`: Envío de comandos crudos.
     * `send_sequence`: Ráfagas de comandos con retardos (ideal para efectos).
-    * `encendido_silencioso`: Método especial para amaneceres que evita el "fogonazo" inicial.
+    * `silent_on`: Método especial para amaneceres que evita el "fogonazo" inicial.
 * **Conexión Blindada:** Implementación de `bleak-retry-connector` para evitar desconexiones y errores de emparejamiento.
 
 ---
