@@ -8,9 +8,11 @@ from bleak_retry_connector import establish_connection, BleakClientWithServiceCa
 from homeassistant.components.light import LightEntity, ColorMode
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.device_registry import DeviceInfo
-from homeassistant.helpers import entity_platform # <-- IMPORTANTE PARA EL NUEVO SERVICIO
+from homeassistant.helpers import entity_platform 
+from homeassistant.const import STATE_ON # <-- IMPORTANTE: Añadida la constante de estado
 
 from .const import DOMAIN, CONF_MAC
 
@@ -31,7 +33,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
         "async_silent_on",
     )
 
-class TwinstarLight(LightEntity):
+class TwinstarLight(LightEntity, RestoreEntity):
     def __init__(self, mac_address):
         self._mac = mac_address
         self._attr_name = "Acuario Twinstar"
@@ -41,15 +43,33 @@ class TwinstarLight(LightEntity):
         self._attr_icon = "mdi:lightbulb-fluorescent-tube"
         self._is_on = False
 
+    # ¡Añade exactamente el mismo device_info aquí!
     @property
     def device_info(self) -> DeviceInfo:
+        # Extraemos los últimos 5 caracteres de la MAC para identificarla (Ej: 1A:FA)
+        mac_corta = self._mac[-5:] if self._mac else "Desconocida"
+        
         return DeviceInfo(
             identifiers={(DOMAIN, self._mac)},
-            name="Acuario Twinstar",
+            name=f"Acuario Twinstar ({mac_corta})",
             manufacturer="Twinstar",
             model="Controlador LED Bluetooth",
             sw_version="1.0 (Hackeado)",
         )
+
+    # --- NUEVO MOTOR DE MEMORIA AL REINICIAR ---
+    async def async_added_to_hass(self):
+        """Restaura el estado de encendido/apagado tras reiniciar."""
+        await super().async_added_to_hass()
+        
+        # Buscamos en la base de datos cómo estaba la luz antes del reinicio
+        last_state = await self.async_get_last_state()
+        
+        # Si estaba encendida (STATE_ON), actualizamos nuestra variable interna
+        if last_state and last_state.state == STATE_ON:
+            self._is_on = True
+            _LOGGER.debug("Memoria restaurada: La lámpara Twinstar vuelve a estado ON")
+    # -------------------------------------------
 
     @property
     def is_on(self):
@@ -100,8 +120,8 @@ class TwinstarLight(LightEntity):
 
     # --- LA NUEVA FUNCIÓN PARA EL AMANECER ---
     async def async_silent_on(self):
-        """Prepara la rampa: Manda A0, inyecta colores y da el ON en una sola conexión."""
-        comandos_a_enviar = ["A1".encode('utf-8')] # Obligamos al brillo a ser 0
+        """Prepara la rampa: Manda A1, inyecta colores y da el ON en una sola conexión."""
+        comandos_a_enviar = ["A1".encode('utf-8')] # Obligamos al brillo a ser 1 (evita apagado del chip)
         
         entidades_color = [
             ("R", "number.twinstar_rojo"),

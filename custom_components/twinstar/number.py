@@ -41,11 +41,15 @@ class TwinstarColorNumber(NumberEntity, RestoreEntity):
     # ¡Añade exactamente el mismo device_info aquí!
     @property
     def device_info(self) -> DeviceInfo:
+        # Extraemos los últimos 5 caracteres de la MAC para identificarla (Ej: 1A:FA)
+        mac_corta = self._mac[-5:] if self._mac else "Desconocida"
+        
         return DeviceInfo(
             identifiers={(DOMAIN, self._mac)},
-            name="Acuario Twinstar",
+            name=f"Acuario Twinstar ({mac_corta})",
             manufacturer="Twinstar",
             model="Controlador LED Bluetooth",
+            sw_version="1.0 (Hackeado)",
         )
 
     # --- NUEVA FUNCIÓN DE MEMORIA ---
