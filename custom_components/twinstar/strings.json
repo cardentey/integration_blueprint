@@ -1,0 +1,20 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Añadir Acuario Twinstar",
+        "description": "Introduce la dirección MAC de tu lámpara Twinstar.",
+        "data": {
+          "mac": "Dirección MAC (Ej: 50:78:7D:XX:XX:XX)"
+        }
+      },
+      "bluetooth_confirm": {
+        "title": "¡Twinstar encontrada!",
+        "description": "¿Quieres configurar la lámpara **{name}** con la MAC `{mac}` descubierta por Bluetooth?"
+      }
+    },
+    "abort": {
+      "already_configured": "Este dispositivo ya está configurado en Home Assistant."
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "title": "Twinstar Aquarium Light",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Configurar Twinstar",
+        "description": "Introduce la dirección MAC del dispositivo"
+      }
+    }
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "domain": "twinstar",
+  "name": "Twinstar Aquarium Light",
+  "codeowners": ["@cardentey"],
+  "config_flow": true,
+  "dependencies": ["bluetooth"],
+  "documentation": "https://www.home-assistant.io",
+  "integration_type": "device",
+  "iot_class": "local_push",
+  "requirements": ["bleak>=0.21.1", "bleak-retry-connector>=3.0.0"],
+  "version": "1.0.0",
+  "bluetooth": [
+    {
+      "mac_address": "50:78:7D:*"
+    },
+    {
+      "local_name": "Twinstar Light Pro*"
+    }
+  ]
+}

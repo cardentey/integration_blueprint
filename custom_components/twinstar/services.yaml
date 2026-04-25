@@ -1,0 +1,55 @@
+send_command:
+  name: "Enviar Comando Bluetooth"
+  description: "Envía un comando directamente a la lámpara Twinstar."
+  fields:
+    entity_id:
+      name: "Lámpara Twinstar"
+      description: "Selecciona la luz a la que quieres enviar el comando."
+      required: false
+      selector:
+        entity:
+          domain: light
+          integration: twinstar
+    command:
+      name: "Comando"
+      description: "Ejemplo: A50, R100, W20"
+      required: true
+      selector:
+        text:
+
+send_sequence:
+  name: "Enviar Secuencia de Comandos"
+  description: "Envía una lista de comandos con una pausa entre ellos."
+  fields:
+    entity_id:
+      name: "Lámpara Twinstar"
+      description: "Selecciona la luz destino."
+      required: false
+      selector:
+        entity:
+          domain: light
+          integration: twinstar
+    commands:
+      name: "Comandos"
+      description: "Lista de comandos a enviar (Ej: ['R100', 'G0', 'B0'])."
+      required: true
+      selector:
+        object:
+    delay:
+      name: "Retraso (Segundos)"
+      description: "Tiempo de espera entre comandos (Por defecto: 1)."
+      default: 1
+      required: false
+      selector:
+        number:
+          min: 0.1
+          max: 10
+          step: 0.1
+
+silent_on:
+  name: "Encendido Silencioso (Amanecer)"
+  description: "Enciende la lámpara inyectando los colores pero forzando el brillo al 0% para evitar el fogonazo."
+  target:
+    entity:
+      domain: light
+      integration: twinstar
