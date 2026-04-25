@@ -112,11 +112,13 @@ class TwinstarLight(LightEntity, RestoreEntity):
         comandos_a_enviar.append(CMD_ON)
         await self._send_robust_commands(comandos_a_enviar)
         self._is_on = True
+        self.async_write_ha_state() # Actualizamos el botón de Home Assistant a amarillo
 
     async def async_turn_off(self, **kwargs):
         """Apaga la luz de forma segura."""
         await self._send_robust_commands([CMD_OFF])
         self._is_on = False
+        self.async_write_ha_state() # Actualizamos el botón de Home Assistant a amarillo
 
     # --- LA NUEVA FUNCIÓN PARA EL AMANECER ---
     async def async_silent_on(self):
