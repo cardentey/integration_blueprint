@@ -69,7 +69,14 @@ class TwinstarLight(LightEntity, RestoreEntity):
         if last_state and last_state.state == STATE_ON:
             self._is_on = True
             _LOGGER.debug("Memoria restaurada: La lámpara Twinstar vuelve a estado ON")
+
+        # Registramos la entidad para poder actualizar el estado desde el servicio global
+        self.hass.data.setdefault(DOMAIN, {}).setdefault("entities", {})[self._mac] = self
     # -------------------------------------------
+
+    async def async_will_remove_from_hass(self):
+        self.hass.data.get(DOMAIN, {}).get("entities", {}).pop(self._mac, None)
+        await super().async_will_remove_from_hass()
 
     @property
     def is_on(self):
