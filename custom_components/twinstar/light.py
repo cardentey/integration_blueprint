@@ -23,7 +23,7 @@ CMD_OFF = bytearray.fromhex("6f666600")
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
     mac_address = entry.data.get(CONF_MAC)
-    async_add_entities([TwinstarLight(mac_address)], update_before_add=True)
+    async_add_entities([TwinstarLight(entry, mac_address)], update_before_add=True)
 
     # --- REGISTRAMOS EL SERVICIO EXCLUSIVO DE ESTA LUZ ---
     platform = entity_platform.async_get_current_platform()
@@ -34,7 +34,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     )
 
 class TwinstarLight(LightEntity, RestoreEntity):
-    def __init__(self, mac_address):
+    def __init__(self, entry: ConfigEntry, mac_address):
+        self._entry = entry
         self._mac = mac_address
         self._attr_name = "Acuario Twinstar"
         self._attr_unique_id = f"twinstar_light_{mac_address}"
@@ -70,12 +71,16 @@ class TwinstarLight(LightEntity, RestoreEntity):
             self._is_on = True
             _LOGGER.debug("Memoria restaurada: La lámpara Twinstar vuelve a estado ON")
 
-        # Registramos la entidad para poder actualizar el estado desde el servicio global
-        self.hass.data.setdefault(DOMAIN, {}).setdefault("entities", {})[self._mac] = self
+        # Guardamos la entidad en la runtime_data del entry para servicios y actualizaciones
+        runtime_data = getattr(self._entry, "runtime_data", None)
+        if runtime_data is not None:
+            runtime_data.entities[self._mac] = self
     # -------------------------------------------
 
     async def async_will_remove_from_hass(self):
-        self.hass.data.get(DOMAIN, {}).get("entities", {}).pop(self._mac, None)
+        runtime_data = getattr(self._entry, "runtime_data", None)
+        if runtime_data is not None:
+            runtime_data.entities.pop(self._mac, None)
         await super().async_will_remove_from_hass()
 
     @property

@@ -1,6 +1,10 @@
 """Inicialización de la integración Twinstar."""
+from __future__ import annotations
+
 import logging
 import asyncio
+from dataclasses import dataclass, field
+from typing import Any
 
 from homeassistant.components.bluetooth import async_ble_device_from_address
 from bleak_retry_connector import establish_connection, BleakClientWithServiceCache
@@ -18,22 +22,36 @@ _LOGGER = logging.getLogger(__name__)
 PLATFORMS = ["light", "number"]
 WRITE_UUID = "0000dead-0000-1000-8000-00805f9b34fb"
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+
+@dataclass
+class TwinstarRuntimeData:
+    mac_address: str
+    entities: dict[str, Any] = field(default_factory=dict)
+
+
+TwinstarConfigEntry = ConfigEntry[TwinstarRuntimeData]
+
+
+def _get_entry_runtime_data(entry: ConfigEntry) -> TwinstarRuntimeData | None:
+    return getattr(entry, "runtime_data", None)
+
+
+async def async_setup_entry(hass: HomeAssistant, entry: TwinstarConfigEntry) -> bool:
     """Configura Twinstar desde una entrada de configuración."""
-    hass.data.setdefault(DOMAIN, {
-        "entries": {},
-        "entities": {},
-    })
     mac_address = entry.data.get(CONF_MAC)
+    entry.runtime_data = TwinstarRuntimeData(mac_address=mac_address)
 
-    # 1. Guardamos la MAC de esta lámpara en el diccionario global
-    hass.data[DOMAIN]["entries"][entry.entry_id] = mac_address
-
-    # 2. Cargamos las plataformas
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     def _get_twinstar_light_entity(target_mac):
-        return hass.data[DOMAIN].get("entities", {}).get(target_mac)
+        for loaded_entry in hass.config_entries.async_entries(DOMAIN):
+            runtime_data = _get_entry_runtime_data(loaded_entry)
+            if runtime_data is None:
+                continue
+            entity = runtime_data.entities.get(target_mac)
+            if entity is not None:
+                return entity
+        return None
 
     def _parse_light_on_state(command):
         if isinstance(command, bytes):
@@ -77,8 +95,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                             return identifier[1]
 
         # Si no pasaron MAC ni entity_id, y solo hay 1 lámpara instalada, la usamos
-        if not target_mac and len(hass.data[DOMAIN]["entries"]) == 1:
-            return list(hass.data[DOMAIN]["entries"].values())[0]
+        if not target_mac:
+            runtime_entries = [
+                runtime_data.mac_address
+                for loaded_entry in hass.config_entries.async_entries(DOMAIN)
+                if (runtime_data := _get_entry_runtime_data(loaded_entry)) is not None
+            ]
+            if len(runtime_entries) == 1:
+                return runtime_entries[0]
 
         return target_mac
     # ----------------------------------------------------
@@ -155,9 +179,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     return True
 
-async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+async def async_unload_entry(hass: HomeAssistant, entry: TwinstarConfigEntry) -> bool:
     """Descarga la integración si decides borrarla."""
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    if unload_ok:
-        hass.data[DOMAIN]["entries"].pop(entry.entry_id, None)
-    return unload_ok
+    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
