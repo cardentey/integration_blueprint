@@ -1,42 +1,63 @@
 """Interruptor inteligente para Twinstar."""
+from __future__ import annotations
+
 import logging
-import asyncio
 
-from homeassistant.components.bluetooth import async_ble_device_from_address
-from bleak_retry_connector import establish_connection, BleakClientWithServiceCache
-
-from homeassistant.components.light import LightEntity, ColorMode
+from homeassistant.components.light import ColorMode, LightEntity
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import STATE_ON
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.restore_state import RestoreEntity
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.device_registry import DeviceInfo
-from homeassistant.helpers import entity_platform 
-from homeassistant.const import STATE_ON # <-- IMPORTANTE: Añadida la constante de estado
+from homeassistant.helpers.entity_platform import AddEntitiesCallback, async_get_current_platform
+from homeassistant.helpers.restore_state import RestoreEntity
 
-from .const import DOMAIN, CONF_MAC
+from .ble_client import TwinstarBLEClient
+from .const import (
+    CMD_OFF,
+    CMD_ON,
+    COLOR_ONLY_PREFIXES,
+    DOMAIN,
+    CONF_MAC,
+    get_device_info,
+)
 
 _LOGGER = logging.getLogger(__name__)
-WRITE_UUID = "0000dead-0000-1000-8000-00805f9b34fb"
-CMD_ON = bytearray.fromhex("6f6e00")
-CMD_OFF = bytearray.fromhex("6f666600")
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
-    mac_address = entry.data.get(CONF_MAC)
-    async_add_entities([TwinstarLight(entry, mac_address)], update_before_add=True)
 
-    # --- REGISTRAMOS EL SERVICIO EXCLUSIVO DE ESTA LUZ ---
-    platform = entity_platform.async_get_current_platform()
+async def async_setup_entry(
+    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
+) -> None:
+    """Configura la entidad light desde una entrada de configuración."""
+    runtime_data = entry.runtime_data
+    mac_address = runtime_data.mac_address
+    ble_client = runtime_data.ble_client
+
+    async_add_entities(
+        [TwinstarLight(entry, mac_address, ble_client)], update_before_add=True
+    )
+
+    # Registrar el servicio exclusivo de esta entidad (silent_on para amanecer)
+    platform = async_get_current_platform()
     platform.async_register_entity_service(
         "silent_on",
-        {}, # No necesita parámetros extra, coge todo de la base de datos
+        {},
         "async_silent_on",
     )
 
+
 class TwinstarLight(LightEntity, RestoreEntity):
-    def __init__(self, entry: ConfigEntry, mac_address):
+    """Representa una lámpara de acuario Twinstar."""
+
+    def __init__(
+        self,
+        entry: ConfigEntry,
+        mac_address: str,
+        ble_client: TwinstarBLEClient,
+    ) -> None:
         self._entry = entry
         self._mac = mac_address
+        self._ble_client = ble_client
         self._attr_name = "Acuario Twinstar"
         self._attr_unique_id = f"twinstar_light_{mac_address}"
         self._attr_supported_color_modes = {ColorMode.ONOFF}
@@ -44,116 +65,133 @@ class TwinstarLight(LightEntity, RestoreEntity):
         self._attr_icon = "mdi:lightbulb-fluorescent-tube"
         self._is_on = False
 
-    # ¡Añade exactamente el mismo device_info aquí!
     @property
     def device_info(self) -> DeviceInfo:
-        # Extraemos los últimos 5 caracteres de la MAC para identificarla (Ej: 1A:FA)
-        mac_corta = self._mac[-5:] if self._mac else "Desconocida"
-        
-        return DeviceInfo(
-            identifiers={(DOMAIN, self._mac)},
-            name=f"Acuario Twinstar ({mac_corta})",
-            manufacturer="Twinstar",
-            model="Controlador LED Bluetooth",
-            sw_version="1.0 (Hackeado)",
-        )
+        """Retorna información del dispositivo (compartida con number.py)."""
+        return get_device_info(self._mac)
 
-    # --- NUEVO MOTOR DE MEMORIA AL REINICIAR ---
-    async def async_added_to_hass(self):
+    # --- Restauración de estado al reiniciar ---
+
+    async def async_added_to_hass(self) -> None:
         """Restaura el estado de encendido/apagado tras reiniciar."""
         await super().async_added_to_hass()
-        
-        # Buscamos en la base de datos cómo estaba la luz antes del reinicio
+
         last_state = await self.async_get_last_state()
-        
-        # Si estaba encendida (STATE_ON), actualizamos nuestra variable interna
         if last_state and last_state.state == STATE_ON:
             self._is_on = True
             _LOGGER.debug("Memoria restaurada: La lámpara Twinstar vuelve a estado ON")
 
-        # Guardamos la entidad en la runtime_data del entry para servicios y actualizaciones
+        # Registramos la entidad en runtime_data para que __init__.py la encuentre
         runtime_data = getattr(self._entry, "runtime_data", None)
         if runtime_data is not None:
             runtime_data.entities[self._mac] = self
-    # -------------------------------------------
 
-    async def async_will_remove_from_hass(self):
+    async def async_will_remove_from_hass(self) -> None:
+        """Limpia la referencia al eliminar la entidad."""
         runtime_data = getattr(self._entry, "runtime_data", None)
         if runtime_data is not None:
             runtime_data.entities.pop(self._mac, None)
         await super().async_will_remove_from_hass()
 
+    # --- Estado ---
+
     @property
-    def is_on(self):
+    def is_on(self) -> bool:
+        """Retorna si la luz está encendida."""
         return self._is_on
 
-    async def _send_robust_commands(self, comandos_list):
-        ble_device = async_ble_device_from_address(self.hass, self._mac, connectable=True)
-        if not ble_device:
-            _LOGGER.error("Twinstar (%s) no está al alcance del Bluetooth", self._mac)
-            return
+    def set_is_on(self, state: bool) -> None:
+        """Actualiza el estado on/off desde servicios externos (send_command, etc.)."""
+        self._is_on = state
+        self.async_write_ha_state()
 
-        try:
-            client = await establish_connection(BleakClientWithServiceCache, ble_device, self._attr_name)
-            try:
-                for comando in comandos_list:
-                    await client.write_gatt_char(WRITE_UUID, comando, response=True)
-                    await asyncio.sleep(0.1)
-            finally:
-                await client.disconnect()
-        except Exception as e:
-            _LOGGER.error("Error en conexión con Twinstar: %s", e)
+    # --- Comandos ---
 
-    async def async_turn_on(self, **kwargs):
-        """Encendido normal desde el botón (RESTAURAMOS LA 'A' AQUÍ)"""
-        entidades = [
-            ("A", "number.twinstar_brillo_general"), # Vuelve la A para que funcione normal
-            ("R", "number.twinstar_rojo"),
-            ("G", "number.twinstar_verde"),
-            ("B", "number.twinstar_azul"),
-            ("W", "number.twinstar_cultivo_blanco"),
-        ]
+    async def async_turn_on(self, **kwargs) -> None:
+        """Encendido normal: envía brillo + colores + ON."""
+        commands = self._build_color_commands(include_brightness=True)
+        commands.append(CMD_ON)
 
-        comandos_a_enviar = []
-        for prefix, entity_id in entidades:
-            state = self.hass.states.get(entity_id)
-            if state and state.state not in ("unknown", "unavailable"):
-                val = int(float(state.state))
-                comandos_a_enviar.append(f"{prefix}{val}".encode('utf-8'))
-        
-        comandos_a_enviar.append(CMD_ON)
-        await self._send_robust_commands(comandos_a_enviar)
-        self._is_on = True
-        self.async_write_ha_state() # Actualizamos el botón de Home Assistant a amarillo
+        success = await self._ble_client.send_commands(commands)
+        if success:
+            self._is_on = True
+            self.async_write_ha_state()
 
-    async def async_turn_off(self, **kwargs):
+    async def async_turn_off(self, **kwargs) -> None:
         """Apaga la luz de forma segura."""
-        await self._send_robust_commands([b"A0", CMD_OFF])
-        self._is_on = False
-        self.async_write_ha_state() # Actualizamos el botón de Home Assistant a amarillo
+        success = await self._ble_client.send_commands([b"A0", CMD_OFF])
+        if success:
+            self._is_on = False
+            self.async_write_ha_state()
 
-    # --- LA NUEVA FUNCIÓN PARA EL AMANECER ---
-    async def async_silent_on(self):
-        """Prepara la rampa: Manda A1, inyecta colores y da el ON en una sola conexión."""
-        comandos_a_enviar = ["A1".encode('utf-8')] # Obligamos al brillo a ser 1 (evita apagado del chip)
-        
-        entidades_color = [
-            ("R", "number.twinstar_rojo"),
-            ("G", "number.twinstar_verde"),
-            ("B", "number.twinstar_azul"),
-            ("W", "number.twinstar_cultivo_blanco"),
-        ]
+    async def async_silent_on(self) -> None:
+        """Amanecer: fuerza A1, inyecta colores y da ON.
 
-        for prefix, entity_id in entidades_color:
-            state = self.hass.states.get(entity_id)
-            if state and state.state not in ("unknown", "unavailable"):
+        Diseñado para preparar la rampa: el brillo arranca al mínimo (1%)
+        para evitar el fogonazo, y luego una automatización sube gradualmente
+        hasta el valor de "Brillo General" usando send_sequence.
+        """
+        commands: list[bytes | bytearray] = [b"A1"]
+        commands.extend(self._build_color_commands(include_brightness=False))
+        commands.append(CMD_ON)
+
+        success = await self._ble_client.send_commands(commands)
+        if success:
+            self._is_on = True
+            self.async_write_ha_state()
+
+    # --- Utilidades ---
+
+    def _build_color_commands(self, include_brightness: bool) -> list[bytes]:
+        """Construye la lista de comandos de color leyendo entidades hermanas por device_id.
+
+        Busca todas las entidades number del mismo device (por identifiers)
+        y extrae el prefijo de canal del unique_id (A, R, G, B, W).
+
+        Args:
+            include_brightness: Si True incluye el canal A (brillo),
+                                si False solo R, G, B, W.
+        """
+        dev_reg = dr.async_get(self.hass)
+        ent_reg = er.async_get(self.hass)
+
+        device = dev_reg.async_get_device(identifiers={(DOMAIN, self._mac)})
+        if not device:
+            _LOGGER.warning(
+                "Twinstar: No se encontró el dispositivo para MAC %s", self._mac
+            )
+            return []
+
+        commands: list[bytes] = []
+
+        for entity_entry in er.async_entries_for_device(ent_reg, device.id):
+            # Solo nos interesan las entidades number
+            if not entity_entry.entity_id.startswith("number."):
+                continue
+
+            # Extraer el prefijo del canal del unique_id: "twinstar_<mac>_<prefix>"
+            uid = entity_entry.unique_id or ""
+            parts = uid.rsplit("_", 1)
+            if len(parts) < 2:
+                continue
+            prefix = parts[-1]
+
+            # Filtrar según include_brightness
+            if not include_brightness and prefix not in COLOR_ONLY_PREFIXES:
+                continue
+            if prefix not in ("A", "R", "G", "B", "W"):
+                continue
+
+            # Leer el estado actual
+            state = self.hass.states.get(entity_entry.entity_id)
+            if not state or state.state in ("unknown", "unavailable"):
+                continue
+
+            try:
                 val = int(float(state.state))
-                comandos_a_enviar.append(f"{prefix}{val}".encode('utf-8'))
-        
-        comandos_a_enviar.append(CMD_ON) # Rematamos con el encendido
-        
-        # Enviamos TODA la secuencia en un solo bloque sin atascar el Bluetooth
-        await self._send_robust_commands(comandos_a_enviar)
-        
-        self._is_on = True
-        self.async_write_ha_state() # Actualizamos el botón de Home Assistant a amarillo
+            except (ValueError, TypeError):
+                continue
+
+            commands.append(f"{prefix}{val}".encode("utf-8"))
+
+        return commands

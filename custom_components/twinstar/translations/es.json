@@ -4,8 +4,22 @@
     "step": {
       "user": {
         "title": "Configurar Twinstar",
-        "description": "Introduce la dirección MAC del dispositivo"
+        "description": "Introduce la dirección MAC Bluetooth de tu lámpara Twinstar.",
+        "data": {
+          "mac_address": "Dirección MAC (Ej: 50:78:7D:XX:XX:XX)"
+        }
+      },
+      "bluetooth_confirm": {
+        "title": "¡Twinstar encontrada!",
+        "description": "Se ha detectado la lámpara **{name}** con MAC `{mac}`. ¿Quieres configurarla?"
       }
+    },
+    "error": {
+      "invalid_mac": "La dirección MAC no es válida. Usa el formato XX:XX:XX:XX:XX:XX."
+    },
+    "abort": {
+      "already_configured": "Este dispositivo ya está configurado.",
+      "not_twinstar_pro": "El dispositivo detectado no es una Twinstar Light Pro."
     }
   }
 }
