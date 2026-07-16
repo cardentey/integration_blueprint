@@ -6,8 +6,8 @@ import asyncio
 from dataclasses import dataclass, field
 from typing import Any
 
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.config_entries import ConfigEntry, ConfigEntryState
+from homeassistant.core import HomeAssistant, ServiceCall
 
 # Registros para buscar entidades por device_id
 from homeassistant.helpers import entity_registry as er
@@ -79,6 +79,135 @@ def _parse_light_on_state(command: str | bytes | bytearray) -> bool | None:
     return None
 
 
+def _get_twinstar_light_entity(hass: HomeAssistant, target_mac: str):
+    """Busca la entidad light registrada para una MAC."""
+    for loaded_entry in hass.config_entries.async_entries(DOMAIN):
+        runtime_data = _get_entry_runtime_data(loaded_entry)
+        if runtime_data is None:
+            continue
+        entity = runtime_data.entities.get(target_mac)
+        if entity is not None:
+            return entity
+    return None
+
+
+def _get_ble_client_for_mac(hass: HomeAssistant, target_mac: str) -> TwinstarBLEClient | None:
+    """Obtiene el ble_client para una MAC determinada."""
+    for loaded_entry in hass.config_entries.async_entries(DOMAIN):
+        runtime_data = _get_entry_runtime_data(loaded_entry)
+        if runtime_data is None:
+            continue
+        if runtime_data.mac_address == target_mac:
+            return runtime_data.ble_client
+    return None
+
+
+def _update_light_state_from_command(hass: HomeAssistant, target_mac: str, command: str) -> None:
+    """Actualiza el estado de la entidad light según el comando enviado."""
+    entity = _get_twinstar_light_entity(hass, target_mac)
+    if entity is None:
+        return
+    state = _parse_light_on_state(command)
+    if state is None:
+        return
+    entity.set_is_on(state)
+
+
+def _obtener_mac_destino(hass: HomeAssistant, call_data: dict) -> str | None:
+    """Busca la MAC a partir de entity_id, mac explícita o por defecto."""
+    target_mac = call_data.get("mac")
+    entity_id = call_data.get("entity_id")
+
+    if entity_id:
+        ent_reg = er.async_get(hass)
+        dev_reg = dr.async_get(hass)
+        entity = ent_reg.async_get(entity_id)
+        if entity and entity.device_id:
+            device = dev_reg.async_get(entity.device_id)
+            if device:
+                for identifier in device.identifiers:
+                    if identifier[0] == DOMAIN:
+                        return identifier[1]
+
+    # Si no pasaron MAC ni entity_id, y solo hay 1 lámpara instalada, la usamos
+    if not target_mac:
+        runtime_entries = [
+            runtime_data.mac_address
+            for loaded_entry in hass.config_entries.async_entries(DOMAIN)
+            if (runtime_data := _get_entry_runtime_data(loaded_entry)) is not None
+        ]
+        if len(runtime_entries) == 1:
+            return runtime_entries[0]
+
+    return target_mac
+
+
+async def async_setup_services(hass: HomeAssistant) -> None:
+    """Registra los servicios de la integración."""
+    if hass.services.has_service(DOMAIN, "send_command"):
+        return
+
+    async def handle_send_command(call: ServiceCall) -> None:
+        """Envía un comando de texto crudo directamente a la lámpara."""
+        command = call.data.get("command")
+        target_mac = _obtener_mac_destino(hass, call.data)
+
+        if not target_mac:
+            _LOGGER.error("Twinstar (send_command): No se encontró la lámpara destino.")
+            return
+
+        ble_client_for_target = _get_ble_client_for_mac(hass, target_mac)
+        if not ble_client_for_target:
+            _LOGGER.error(
+                "Twinstar (send_command): No hay cliente BLE para MAC %s", target_mac
+            )
+            return
+
+        try:
+            success = await ble_client_for_target.send_command(command)
+            if success:
+                _LOGGER.info("Twinstar: Comando '%s' enviado a MAC: %s", command, target_mac)
+                _update_light_state_from_command(hass, target_mac, command)
+        except Exception as e:
+            _LOGGER.error("Error enviando comando a %s: %s", target_mac, e)
+
+    async def handle_send_sequence(call: ServiceCall) -> None:
+        """Envía múltiples comandos en una sola conexión BLE."""
+        commands = call.data.get("commands", [])
+        delay = call.data.get("delay", 1)
+        target_mac = _obtener_mac_destino(hass, call.data)
+
+        if not target_mac:
+            _LOGGER.error("Twinstar (send_sequence): No se encontró la lámpara destino.")
+            return
+
+        ble_client_for_target = _get_ble_client_for_mac(hass, target_mac)
+        if not ble_client_for_target:
+            _LOGGER.error(
+                "Twinstar (send_sequence): No hay cliente BLE para MAC %s", target_mac
+            )
+            return
+
+        try:
+            success = await ble_client_for_target.send_commands(commands, delay=delay)
+            if success:
+                # Determinar el estado final de la luz a partir del último comando relevante
+                last_state = None
+                for cmd in commands:
+                    parsed = _parse_light_on_state(cmd)
+                    if parsed is not None:
+                        last_state = parsed
+                if last_state is not None:
+                    entity = _get_twinstar_light_entity(hass, target_mac)
+                    if entity is not None:
+                        entity.set_is_on(last_state)
+        except Exception as e:
+            _LOGGER.error("Error enviando secuencia a %s: %s", target_mac, e)
+
+    hass.services.async_register(DOMAIN, "send_command", handle_send_command)
+    hass.services.async_register(DOMAIN, "send_sequence", handle_send_sequence)
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: TwinstarConfigEntry) -> bool:
     """Configura Twinstar desde una entrada de configuración."""
     mac_address = entry.data.get(CONF_MAC)
@@ -91,126 +220,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: TwinstarConfigEntry) -> 
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    # --- Funciones auxiliares para los service handlers ---
-
-    def _get_twinstar_light_entity(target_mac: str):
-        """Busca la entidad light registrada para una MAC."""
-        for loaded_entry in hass.config_entries.async_entries(DOMAIN):
-            runtime_data = _get_entry_runtime_data(loaded_entry)
-            if runtime_data is None:
-                continue
-            entity = runtime_data.entities.get(target_mac)
-            if entity is not None:
-                return entity
-        return None
-
-    def _get_ble_client_for_mac(target_mac: str) -> TwinstarBLEClient | None:
-        """Obtiene el ble_client para una MAC determinada."""
-        for loaded_entry in hass.config_entries.async_entries(DOMAIN):
-            runtime_data = _get_entry_runtime_data(loaded_entry)
-            if runtime_data is None:
-                continue
-            if runtime_data.mac_address == target_mac:
-                return runtime_data.ble_client
-        return None
-
-    def _update_light_state_from_command(target_mac: str, command: str) -> None:
-        """Actualiza el estado de la entidad light según el comando enviado."""
-        entity = _get_twinstar_light_entity(target_mac)
-        if entity is None:
-            return
-        state = _parse_light_on_state(command)
-        if state is None:
-            return
-        entity.set_is_on(state)
-
-    def _obtener_mac_destino(call_data: dict) -> str | None:
-        """Busca la MAC a partir de entity_id, mac explícita o por defecto."""
-        target_mac = call_data.get("mac")
-        entity_id = call_data.get("entity_id")
-
-        if entity_id:
-            ent_reg = er.async_get(hass)
-            dev_reg = dr.async_get(hass)
-            entity = ent_reg.async_get(entity_id)
-            if entity and entity.device_id:
-                device = dev_reg.async_get(entity.device_id)
-                if device:
-                    for identifier in device.identifiers:
-                        if identifier[0] == DOMAIN:
-                            return identifier[1]
-
-        # Si no pasaron MAC ni entity_id, y solo hay 1 lámpara instalada, la usamos
-        if not target_mac:
-            runtime_entries = [
-                runtime_data.mac_address
-                for loaded_entry in hass.config_entries.async_entries(DOMAIN)
-                if (runtime_data := _get_entry_runtime_data(loaded_entry)) is not None
-            ]
-            if len(runtime_entries) == 1:
-                return runtime_entries[0]
-
-        return target_mac
-
-    # --- Service handlers ---
-
-    async def handle_send_command(call) -> None:
-        """Envía un comando de texto crudo directamente a la lámpara."""
-        command = call.data.get("command")
-        target_mac = _obtener_mac_destino(call.data)
-
-        if not target_mac:
-            _LOGGER.error("Twinstar (send_command): No se encontró la lámpara destino.")
-            return
-
-        ble_client_for_target = _get_ble_client_for_mac(target_mac)
-        if not ble_client_for_target:
-            _LOGGER.error(
-                "Twinstar (send_command): No hay cliente BLE para MAC %s", target_mac
-            )
-            return
-
-        success = await ble_client_for_target.send_command(command)
-        if success:
-            _LOGGER.info("Twinstar: Comando '%s' enviado a MAC: %s", command, target_mac)
-            _update_light_state_from_command(target_mac, command)
-
-    async def handle_send_sequence(call) -> None:
-        """Envía múltiples comandos en una sola conexión BLE."""
-        commands = call.data.get("commands", [])
-        delay = call.data.get("delay", 1)
-        target_mac = _obtener_mac_destino(call.data)
-
-        if not target_mac:
-            _LOGGER.error("Twinstar (send_sequence): No se encontró la lámpara destino.")
-            return
-
-        ble_client_for_target = _get_ble_client_for_mac(target_mac)
-        if not ble_client_for_target:
-            _LOGGER.error(
-                "Twinstar (send_sequence): No hay cliente BLE para MAC %s", target_mac
-            )
-            return
-
-        success = await ble_client_for_target.send_commands(commands, delay=delay)
-        if success:
-            # Determinar el estado final de la luz a partir del último comando relevante
-            last_state = None
-            for cmd in commands:
-                parsed = _parse_light_on_state(cmd)
-                if parsed is not None:
-                    last_state = parsed
-            if last_state is not None:
-                entity = _get_twinstar_light_entity(target_mac)
-                if entity is not None:
-                    entity.set_is_on(last_state)
-
-    # Registramos los servicios solo si no se han registrado antes
-    # (para no sobrescribirlos al añadir una 2ª lámpara)
-    if not hass.services.has_service(DOMAIN, "send_command"):
-        hass.services.async_register(DOMAIN, "send_command", handle_send_command)
-    if not hass.services.has_service(DOMAIN, "send_sequence"):
-        hass.services.async_register(DOMAIN, "send_sequence", handle_send_sequence)
+    # Configuramos los servicios una sola vez
+    await async_setup_services(hass)
 
     return True
 
@@ -223,7 +234,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: TwinstarConfigEntry) ->
     remaining = [
         e
         for e in hass.config_entries.async_entries(DOMAIN)
-        if e.entry_id != entry.entry_id
+        if e.entry_id != entry.entry_id and e.state == ConfigEntryState.LOADED
     ]
     if not remaining:
         hass.services.async_remove(DOMAIN, "send_command")

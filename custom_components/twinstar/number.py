@@ -81,9 +81,14 @@ class TwinstarColorNumber(NumberEntity, RestoreEntity):
 
     async def async_set_native_value(self, value: float) -> None:
         """Envía el nuevo valor al dispositivo por BLE."""
-        self._value = int(value)
-        comando = f"{self._prefix}{self._value}"
+        nuevo_valor = int(value)
+        comando = f"{self._prefix}{nuevo_valor}"
 
         success = await self._ble_client.send_command(comando)
         if success:
+            self._value = nuevo_valor
+            self.async_write_ha_state()
             _LOGGER.debug("Enviado %s con éxito", comando)
+        else:
+            # Si falla, forzamos a la UI a volver al valor anterior
+            self.async_write_ha_state()
