@@ -21,5 +21,11 @@
       "already_configured": "This device is already configured.",
       "not_twinstar_pro": "The detected device is not a Twinstar Light Pro."
     }
+  },
+  "services": {
+    "set_schedule": {
+      "name": "Program Schedule in Controller",
+      "description": "Programs start/end times and sunrise/sunset durations natively into the Twinstar lamp memory."
+    }
   }
 }

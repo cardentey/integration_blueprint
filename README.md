@@ -11,11 +11,13 @@ Esta integración personalizada permite controlar las pantallas LED **Twinstar L
 * **Autodescubrimiento Bluetooth:** La integración detecta automáticamente nuevas lámparas Twinstar Light Pro en el área.
 * **Soporte Multi-dispositivo:** Configura y controla múltiples acuarios de forma independiente.
 * **Control de Canales Individuales:** Entidades `number` para ajustar Rojo, Verde, Azul, Blanco y Brillo General (0-100%).
-* **Persistencia de Estado:** Los valores de los canales se restauran automáticamente tras reiniciar Home Assistant.
+* **Temporizador en Hardware (Horarios y Rampas):** Entidades nativas de hora (`time`) y deslizadores para programar el amanecer/atardecer directamente en la memoria del controlador (`TOn:HHMM_HHMM_MM_MM`).
+* **Sincronización de Reloj al Segundo:** Sincronización automática de fecha y hora (`YYYYMMDDHHMMSS`) del controlador en cada ajuste y botón manual (`button.twinstar_sincronizar_reloj`).
+* **Persistencia de Estado:** Los valores de los canales y duraciones se restauran automáticamente tras reiniciar Home Assistant.
 * **Servicios Avanzados:**
+    * `set_schedule`: Programa encendido, apagado y duraciones de rampa en un solo paso.
     * `send_command`: Envío de comandos crudos.
     * `send_sequence`: Ráfagas de comandos con retardos (ideal para efectos).
-    * `silent_on`: Método especial para amaneceres que evita el "fogonazo" inicial.
 * **Conexión Blindada:** Implementación de `bleak-retry-connector` para evitar desconexiones y errores de emparejamiento.
 
 ---
@@ -43,39 +45,29 @@ Si no aparece el descubrimiento:
 
 ---
 
+## ⏱️ Programación Nativa en el Controlador
+
+La integración permite actuar directamente sobre el temporizador y el reloj en tiempo real (RTC) del controlador LED Twinstar sin necesidad de scripts continuos en Home Assistant:
+- **Hora de Encendido / Hora de Apagado (`time`):** Entidades nativas con selector de hora para fijar el horario diario de luz.
+- **Amanecer / Atardecer (`number`):** Deslizadores de 0 a 120 minutos para configurar la rampa de encendido progresivo y apagado suave.
+- **Botón Sincronizar Reloj (`button`):** Transmite la hora actual en formato `YYYYMMDDHHMMSS` a la lámpara para corregir cualquier desfase del reloj interno. *Cada vez que modificas el horario, el reloj se sincroniza automáticamente.*
+
+---
+
 ## 💡 Servicios (Actions)
+
+### `twinstar.set_schedule`
+Programa la hora de encendido, apagado y duraciones de rampa en el controlador.
+* `entity_id`: La lámpara destino.
+* `start_time`: Hora de encendido (ej: `09:00`).
+* `end_time`: Hora de apagado (ej: `21:00`).
+* `sunrise_minutes`: Minutos de amanecer (rango 0-120).
+* `sunset_minutes`: Minutos de atardecer (rango 0-120).
 
 ### `twinstar.send_command`
 Envía un comando único (ej: `A50` para brillo al 50%).
 * `entity_id`: La lámpara destino.
 * `command`: El comando de texto.
-
-### `twinstar.silent_on`
-Ideal para automatizaciones de amanecer. Enciende la lámpara inyectando los colores actuales pero forzando el brillo al 1% para iniciar una rampa suave.
-
----
-
-## 🌅 Ejemplo de Amanecer Pro (Script)
-
-Este script realiza una rampa de 30 minutos sin bloquear el sistema y de forma segura para el controlador Bluetooth.
-
-```yaml
-alias: "Acuario: Amanecer"
-sequence:
-  - action: twinstar.silent_on
-    target:
-      entity_id: light.acuario_twinstar
-  - delay: "00:00:02"
-  - repeat:
-      count: "{{ states('number.twinstar_brillo_general') | int }}"
-      sequence:
-        - action: twinstar.send_command
-          data:
-            command: "A{{ repeat.index }}"
-            entity_id: light.acuario_twinstar
-        - delay:
-            seconds: "{{ (1800 / (states('number.twinstar_brillo_general') | int)) | round(1) }}"
-```
 
 ---
 
@@ -84,3 +76,4 @@ Esta integración no es oficial de Twinstar. Ha sido desarrollada mediante ingen
 
 ---
 **Desarrollado con ❤️ para los amantes de los acuarios plantados.**
+

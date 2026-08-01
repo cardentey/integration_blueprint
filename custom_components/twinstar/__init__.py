@@ -15,6 +15,7 @@ from homeassistant.helpers import device_registry as dr
 
 from .const import DOMAIN, CONF_MAC, PLATFORMS, CMD_ON, CMD_OFF
 from .ble_client import TwinstarBLEClient
+from .schedule import async_send_schedule_command
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -204,8 +205,41 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         except Exception as e:
             _LOGGER.error("Error enviando secuencia a %s: %s", target_mac, e)
 
+    async def handle_set_schedule(call: ServiceCall) -> None:
+        """Programa las horas de encendido, apagado y duraciones de rampa en el controlador."""
+        target_mac = _obtener_mac_destino(hass, call.data)
+        if not target_mac:
+            _LOGGER.error("Twinstar (set_schedule): No se encontró la lámpara destino.")
+            return
+
+        ble_client_for_target = _get_ble_client_for_mac(hass, target_mac)
+        if not ble_client_for_target:
+            _LOGGER.error(
+                "Twinstar (set_schedule): No hay cliente BLE para MAC %s", target_mac
+            )
+            return
+
+        start_time = call.data.get("start_time")
+        end_time = call.data.get("end_time")
+        sunrise_minutes = call.data.get("sunrise_minutes")
+        sunset_minutes = call.data.get("sunset_minutes")
+
+        try:
+            await async_send_schedule_command(
+                hass,
+                target_mac,
+                ble_client_for_target,
+                start_time=str(start_time) if start_time is not None else None,
+                end_time=str(end_time) if end_time is not None else None,
+                sunrise_minutes=sunrise_minutes,
+                sunset_minutes=sunset_minutes,
+            )
+        except Exception as e:
+            _LOGGER.error("Error programando horario en %s: %s", target_mac, e)
+
     hass.services.async_register(DOMAIN, "send_command", handle_send_command)
     hass.services.async_register(DOMAIN, "send_sequence", handle_send_sequence)
+    hass.services.async_register(DOMAIN, "set_schedule", handle_set_schedule)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: TwinstarConfigEntry) -> bool:
@@ -239,5 +273,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: TwinstarConfigEntry) ->
     if not remaining:
         hass.services.async_remove(DOMAIN, "send_command")
         hass.services.async_remove(DOMAIN, "send_sequence")
+        hass.services.async_remove(DOMAIN, "set_schedule")
 
     return unload_ok

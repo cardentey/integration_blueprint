@@ -9,14 +9,13 @@ from homeassistant.const import STATE_ON
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.device_registry import DeviceInfo
-from homeassistant.helpers.entity_platform import AddEntitiesCallback, async_get_current_platform
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 
 from .ble_client import TwinstarBLEClient
 from .const import (
     CMD_OFF,
     CMD_ON,
-    COLOR_ONLY_PREFIXES,
     DOMAIN,
     CONF_MAC,
     get_device_info,
@@ -37,13 +36,7 @@ async def async_setup_entry(
         [TwinstarLight(entry, mac_address, ble_client)], update_before_add=True
     )
 
-    # Registrar el servicio exclusivo de esta entidad (silent_on para amanecer)
-    platform = async_get_current_platform()
-    platform.async_register_entity_service(
-        "silent_on",
-        {},
-        "async_silent_on",
-    )
+
 
 
 class TwinstarLight(LightEntity, RestoreEntity):
@@ -109,7 +102,7 @@ class TwinstarLight(LightEntity, RestoreEntity):
 
     async def async_turn_on(self, **kwargs) -> None:
         """Encendido normal: envía brillo + colores + ON."""
-        commands = self._build_color_commands(include_brightness=True)
+        commands = self._build_color_commands()
         commands.append(CMD_ON)
 
         success = await self._ble_client.send_commands(commands)
@@ -124,33 +117,13 @@ class TwinstarLight(LightEntity, RestoreEntity):
             self._is_on = False
             self.async_write_ha_state()
 
-    async def async_silent_on(self) -> None:
-        """Amanecer: fuerza A1, inyecta colores y da ON.
-
-        Diseñado para preparar la rampa: el brillo arranca al mínimo (1%)
-        para evitar el fogonazo, y luego una automatización sube gradualmente
-        hasta el valor de "Brillo General" usando send_sequence.
-        """
-        commands: list[bytes | bytearray] = [b"A1"]
-        commands.extend(self._build_color_commands(include_brightness=False))
-        commands.append(CMD_ON)
-
-        success = await self._ble_client.send_commands(commands)
-        if success:
-            self._is_on = True
-            self.async_write_ha_state()
-
     # --- Utilidades ---
 
-    def _build_color_commands(self, include_brightness: bool) -> list[bytes]:
+    def _build_color_commands(self) -> list[bytes]:
         """Construye la lista de comandos de color leyendo entidades hermanas por device_id.
 
         Busca todas las entidades number del mismo device (por identifiers)
         y extrae el prefijo de canal del unique_id (A, R, G, B, W).
-
-        Args:
-            include_brightness: Si True incluye el canal A (brillo),
-                                si False solo R, G, B, W.
         """
         dev_reg = dr.async_get(self.hass)
         ent_reg = er.async_get(self.hass)
@@ -176,9 +149,6 @@ class TwinstarLight(LightEntity, RestoreEntity):
                 continue
             prefix = parts[-1]
 
-            # Filtrar según include_brightness
-            if not include_brightness and prefix not in COLOR_ONLY_PREFIXES:
-                continue
             if prefix not in ("A", "R", "G", "B", "W"):
                 continue
 

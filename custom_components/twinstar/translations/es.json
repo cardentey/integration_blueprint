@@ -21,5 +21,11 @@
       "already_configured": "Este dispositivo ya está configurado.",
       "not_twinstar_pro": "El dispositivo detectado no es una Twinstar Light Pro."
     }
+  },
+  "services": {
+    "set_schedule": {
+      "name": "Programar Horario en el Controlador",
+      "description": "Programa el horario de encendido, apagado y duraciones de amanecer/atardecer nativamente en la memoria de la lámpara Twinstar."
+    }
   }
 }

@@ -19,9 +19,16 @@ CHANNEL_BLUE = "B"
 CHANNEL_WHITE = "W"
 
 # Plataformas
-PLATFORMS: list[str] = ["light", "number"]
+PLATFORMS: list[str] = ["light", "number", "time", "button"]
 
-# Todos los canales para los sliders number (incluido brillo como meta de rampa)
+# Programación de Horarios (Valores por defecto para el temporizador BLE)
+DEFAULT_START_TIME = "09:00"
+DEFAULT_END_TIME = "21:00"
+DEFAULT_SUNRISE_MIN = 30
+DEFAULT_SUNSET_MIN = 30
+
+
+# Todos los canales para los sliders number (incluido Brillo General A)
 ALL_CHANNELS: list[tuple[str, str, str]] = [
     (CHANNEL_BRIGHTNESS, "Brillo General", "mdi:brightness-7"),
     (CHANNEL_RED, "Rojo", "mdi:palette"),
@@ -29,9 +36,6 @@ ALL_CHANNELS: list[tuple[str, str, str]] = [
     (CHANNEL_BLUE, "Azul", "mdi:palette"),
     (CHANNEL_WHITE, "Cultivo (Blanco)", "mdi:white-balance-sunny"),
 ]
-
-# Solo los canales de color (sin brillo) — para silent_on
-COLOR_ONLY_PREFIXES: set[str] = {CHANNEL_RED, CHANNEL_GREEN, CHANNEL_BLUE, CHANNEL_WHITE}
 
 
 def get_device_info(mac: str) -> DeviceInfo:
