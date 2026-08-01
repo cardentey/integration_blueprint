@@ -13,6 +13,15 @@ from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import device_registry as dr
 
+import time
+from homeassistant.components import bluetooth
+from homeassistant.components.bluetooth import (
+    BluetoothCallback,
+    BluetoothChange,
+    BluetoothScanningMode,
+    BluetoothServiceInfoBleak,
+)
+
 from .const import DOMAIN, CONF_MAC, PLATFORMS, CMD_ON, CMD_OFF
 from .ble_client import TwinstarBLEClient
 from .schedule import async_send_schedule_command
@@ -27,6 +36,9 @@ class TwinstarRuntimeData:
     mac_address: str
     ble_client: TwinstarBLEClient
     entities: dict[str, Any] = field(default_factory=dict)
+    last_advertisement_time: float = field(default=0.0)
+    has_synced_after_recovery: bool = field(default=False)
+    recovering: bool = field(default=False)
 
 
 TwinstarConfigEntry = ConfigEntry[TwinstarRuntimeData]
@@ -257,7 +269,101 @@ async def async_setup_entry(hass: HomeAssistant, entry: TwinstarConfigEntry) -> 
     # Configuramos los servicios una sola vez
     await async_setup_services(hass)
 
+    # Registramos el observador BLE para sincronización automática tras reinicio/corte de luz
+    _setup_bluetooth_recovery_listener(hass, entry)
+
     return True
+
+
+def _setup_bluetooth_recovery_listener(
+    hass: HomeAssistant, entry: TwinstarConfigEntry
+) -> None:
+    """Registra un observador BLE para resincronizar el reloj RTC y horario tras un corte de luz o arranque."""
+    runtime_data = entry.runtime_data
+    mac_address = runtime_data.mac_address
+    ble_client = runtime_data.ble_client
+
+    async def _async_recover_schedule() -> None:
+        """Tarea en segundo plano que espera a que la radio esté estable y envía la programación."""
+        try:
+            runtime_data.recovering = True
+            _LOGGER.info(
+                "Twinstar (%s): Esperando 5s para estabilizar la radio BLE y resincronizar horario/reloj tras recuperación...",
+                mac_address,
+            )
+            await asyncio.sleep(5)
+
+            # 1. Sincronizar reloj RTC y horario del temporizador
+            await async_send_schedule_command(hass, mac_address, ble_client)
+
+            # 2. Si la lámpara constaba como ENCENDIDA en Home Assistant, restauramos los canales de color
+            dev_reg = dr.async_get(hass)
+            ent_reg = er.async_get(hass)
+            device = dev_reg.async_get_device(identifiers={(DOMAIN, mac_address)})
+            if device:
+                for entity_entry in er.async_entries_for_device(ent_reg, device.id):
+                    if entity_entry.domain == "light":
+                        state = hass.states.get(entity_entry.entity_id)
+                        if state and state.state == "on":
+                            _LOGGER.info(
+                                "Twinstar (%s): La luz constaba como ENCENDIDA. Restaurando niveles de color...",
+                                mac_address,
+                            )
+                            await hass.services.async_call(
+                                "light",
+                                "turn_on",
+                                {"entity_id": entity_entry.entity_id},
+                                blocking=True,
+                            )
+                        break
+
+            _LOGGER.info(
+                "Twinstar (%s): Sincronización automática de recuperación (RTC + horario + estado) completada con éxito.",
+                mac_address,
+            )
+        except Exception as err:
+            _LOGGER.error(
+                "Twinstar (%s): Error en la sincronización automática de recuperación: %s",
+                mac_address,
+                err,
+            )
+        finally:
+            runtime_data.recovering = False
+
+    def _on_bluetooth_event(
+        service_info: BluetoothServiceInfoBleak,
+        change: BluetoothChange,
+    ) -> None:
+        """Se ejecuta cada vez que HA detecta un anuncio BLE del dispositivo."""
+        if change != BluetoothChange.ADVERTISEMENT:
+            return
+
+        now = time.monotonic()
+        time_since_last = now - runtime_data.last_advertisement_time
+        runtime_data.last_advertisement_time = now
+
+        # Si aún no está sincronizado en este ciclo o si transcurrieron más de 60s sin anuncios (corte de luz/pérdida)
+        if not runtime_data.has_synced_after_recovery or time_since_last > 60:
+            runtime_data.has_synced_after_recovery = True
+            if not runtime_data.recovering:
+                _LOGGER.info(
+                    "Twinstar (%s): Detectada señal BLE tras %s. Iniciando recuperación automática...",
+                    mac_address,
+                    "arranque" if time_since_last > 100000 else f"{time_since_last:.0f}s sin señal",
+                )
+                hass.async_create_background_task(
+                    _async_recover_schedule(),
+                    name=f"twinstar_recovery_{mac_address}",
+                )
+
+    cancel_callback = bluetooth.async_register_callback(
+        hass,
+        _on_bluetooth_event,
+        {"address": mac_address},
+        BluetoothScanningMode.ACTIVE,
+    )
+    entry.async_on_unload(cancel_callback)
+
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: TwinstarConfigEntry) -> bool:
