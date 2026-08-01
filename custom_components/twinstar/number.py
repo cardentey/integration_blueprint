@@ -138,7 +138,7 @@ class TwinstarScheduleNumber(NumberEntity, RestoreEntity):
         self._attr_unique_id = f"twinstar_{mac_address}_{unique_suffix}"
         self._attr_icon = icon
         self._attr_native_min_value = 0
-        self._attr_native_max_value = 120
+        self._attr_native_max_value = 60
         self._attr_native_step = 1
         self._default_val = default_val
         self._value = default_val

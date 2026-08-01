@@ -49,7 +49,7 @@ Si no aparece el descubrimiento:
 
 La integración permite actuar directamente sobre el temporizador y el reloj en tiempo real (RTC) del controlador LED Twinstar sin necesidad de scripts continuos en Home Assistant:
 - **Hora de Encendido / Hora de Apagado (`time`):** Entidades nativas con selector de hora para fijar el horario diario de luz.
-- **Amanecer / Atardecer (`number`):** Deslizadores de 0 a 120 minutos para configurar la rampa de encendido progresivo y apagado suave.
+- **Amanecer / Atardecer (`number`):** Deslizadores de 0 a 60 minutos para configurar la rampa de encendido progresivo y apagado suave.
 - **Botón Sincronizar Reloj (`button`):** Transmite la hora actual en formato `YYYYMMDDHHMMSS` a la lámpara para corregir cualquier desfase del reloj interno. *Cada vez que modificas el horario, el reloj se sincroniza automáticamente.*
 
 ---
@@ -61,8 +61,8 @@ Programa la hora de encendido, apagado y duraciones de rampa en el controlador.
 * `entity_id`: La lámpara destino.
 * `start_time`: Hora de encendido (ej: `09:00`).
 * `end_time`: Hora de apagado (ej: `21:00`).
-* `sunrise_minutes`: Minutos de amanecer (rango 0-120).
-* `sunset_minutes`: Minutos de atardecer (rango 0-120).
+* `sunrise_minutes`: Minutos de amanecer (rango 0-60).
+* `sunset_minutes`: Minutos de atardecer (rango 0-60).
 
 ### `twinstar.send_command`
 Envía un comando único (ej: `A50` para brillo al 50%).

@@ -55,7 +55,7 @@ def _format_minutes(val: int | float | str | None, default_min: int) -> str:
     """Convierte un valor de minutos de rampa a formato entero (ej: 30 -> '30')."""
     try:
         min_int = int(float(val)) if val is not None else default_min
-        min_int = max(0, min(120, min_int))
+        min_int = max(0, min(60, min_int))
         return f"{min_int:02d}"
     except (ValueError, TypeError):
         return f"{default_min:02d}"

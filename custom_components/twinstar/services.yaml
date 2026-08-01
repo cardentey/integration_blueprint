@@ -72,21 +72,21 @@ set_schedule:
         time:
     sunrise_minutes:
       name: "Minutos de Amanecer"
-      description: "Duración de la rampa al encender en minutos (0-120)."
+      description: "Duración de la rampa al encender en minutos (0-60)."
       default: 30
       required: false
       selector:
         number:
           min: 0
-          max: 120
+          max: 60
           step: 1
     sunset_minutes:
       name: "Minutos de Atardecer"
-      description: "Duración de la rampa al apagar en minutos (0-120)."
+      description: "Duración de la rampa al apagar en minutos (0-60)."
       default: 30
       required: false
       selector:
         number:
           min: 0
-          max: 120
+          max: 60
           step: 1
