@@ -296,26 +296,24 @@ def _setup_bluetooth_recovery_listener(
             # 1. Sincronizar reloj RTC y horario del temporizador
             await async_send_schedule_command(hass, mac_address, ble_client)
 
-            # 2. Si la lámpara constaba como ENCENDIDA en Home Assistant, restauramos los canales de color
-            dev_reg = dr.async_get(hass)
-            ent_reg = er.async_get(hass)
-            device = dev_reg.async_get_device(identifiers={(DOMAIN, mac_address)})
-            if device:
-                for entity_entry in er.async_entries_for_device(ent_reg, device.id):
-                    if entity_entry.domain == "light":
-                        state = hass.states.get(entity_entry.entity_id)
-                        if state and state.state == "on":
-                            _LOGGER.info(
-                                "Twinstar (%s): La luz constaba como ENCENDIDA. Restaurando niveles de color...",
-                                mac_address,
-                            )
-                            await hass.services.async_call(
-                                "light",
-                                "turn_on",
-                                {"entity_id": entity_entry.entity_id},
-                                blocking=True,
-                            )
-                        break
+            # 2. Restaurar niveles de color (RGBW + Brillo) en los registros del controlador
+            light_entity = runtime_data.entities.get(mac_address)
+            if light_entity and hasattr(light_entity, "_build_color_commands"):
+                commands = light_entity._build_color_commands()
+                if commands:
+                    if light_entity.is_on:
+                        commands.append(CMD_ON)
+                        _LOGGER.info(
+                            "Twinstar (%s): El acuario constaba ENCENDIDO. Restaurando color RGBW y estado ON.",
+                            mac_address,
+                        )
+                    else:
+                        commands.append(CMD_OFF)
+                        _LOGGER.info(
+                            "Twinstar (%s): El acuario constaba APAGADO. Grabando color RGBW en memoria y manteniendo OFF.",
+                            mac_address,
+                        )
+                    await ble_client.send_commands(commands)
 
             _LOGGER.info(
                 "Twinstar (%s): Sincronización automática de recuperación (RTC + horario + estado) completada con éxito.",

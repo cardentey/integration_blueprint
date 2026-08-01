@@ -50,8 +50,8 @@ Si no aparece el descubrimiento:
 La integración permite actuar directamente sobre el temporizador y el reloj en tiempo real (RTC) del controlador LED Twinstar sin necesidad de scripts continuos en Home Assistant:
 - **Hora de Encendido / Hora de Apagado (`time`):** Entidades nativas con selector de hora para fijar el horario diario de luz.
 - **Amanecer / Atardecer (`number`):** Deslizadores de 0 a 60 minutos para configurar la rampa de encendido progresivo y apagado suave.
-- **Botón Sincronizar Reloj (`button`):** Transmite la hora actual en formato `YYYYMMDDHHMMSS` a la lámpara para corregir cualquier desfase del reloj interno. *Cada vez que modificas el horario, el reloj se sincroniza automáticamente.*
-- **Resiliencia ante Cortes Eléctricos:** Monitoreo activo de la señal BLE. Tras un reinicio de Home Assistant o un corte de luz (>60 segundos), la integración detecta la reconexión y resincroniza automáticamente la hora RTC, la programación de horario y los niveles de color si la pantalla estaba encendida.
+- **Resiliencia ante Cortes Eléctricos:** Monitoreo activo de la señal BLE. Tras un reinicio de Home Assistant o un corte de luz (>60 segundos), la integración detecta la reconexión y resincroniza automáticamente la hora RTC, la programación de horario y los registros de color RGBW y Brillo en la memoria del controlador (manteniendo la pantalla apagada si era de noche o encendiéndola si estaba activa).
+
 
 
 ---
