@@ -4,7 +4,7 @@
 ![Bluetooth](https://img.shields.io/badge/Connectivity-Bluetooth%20BLE-informational.svg)
 ![Model](https://img.shields.io/badge/Model-Twinstar%20Light%20Pro-green.svg)
 
-Esta integración personalizada permite controlar las pantallas LED **Twinstar Light Pro (RGBW)** directamente desde Home Assistant mediante Bluetooth (BLE). Está diseñada para ofrecer un control granular y una estabilidad industrial mediante reintentos automáticos.
+Esta integración personalizada permite controlar las pantallas LED **Twinstar Light Pro (RGBW)** directamente desde Home Assistant mediante Bluetooth (BLE).
 
 ## ✨ Características
 
@@ -25,8 +25,8 @@ Esta integración personalizada permite controlar las pantallas LED **Twinstar L
 ## 🛠️ Instalación
 
 ### Método Manual
-1. Descarga el contenido de la carpeta `twinstar`.
-2. Cópialo en tu directorio de Home Assistant: `/config/custom_components/twinstar/`.
+1. Descarga el contenido de la carpeta `/custom_components/twinstar`.
+2. Cópialo en tu directorio de Home Assistant: `/config/custom_components/twinstar`.
 3. Reinicia Home Assistant.
 
 ---
