@@ -51,6 +51,8 @@ La integración permite actuar directamente sobre el temporizador y el reloj en 
 - **Hora de Encendido / Hora de Apagado (`time`):** Entidades nativas con selector de hora para fijar el horario diario de luz.
 - **Amanecer / Atardecer (`number`):** Deslizadores de 0 a 60 minutos para configurar la rampa de encendido progresivo y apagado suave.
 - **Resiliencia ante Cortes Eléctricos:** Monitoreo activo de la señal BLE. Tras un reinicio de Home Assistant o un corte de luz (>60 segundos), la integración detecta la reconexión y resincroniza automáticamente la hora RTC, la programación de horario y los registros de color RGBW y Brillo en la memoria del controlador (manteniendo la pantalla apagada si era de noche o encendiéndola si estaba activa).
+- **Sincronización Inteligente de Estado (Lectura GATT):** Al iniciar Home Assistant, tras una recuperación y periódicamente (cada 5 minutos), la integración envía el comando de consulta `"powerstatus"` (`WRITE_UUID: 0xdead`) y lee el estado real desde el controlador (`READ_UUID: 0xfef4`). Así, si el temporizador nativo enciende o apaga el acuario, Home Assistant refleja el estado físico sin depender de estimaciones.
+
 
 
 

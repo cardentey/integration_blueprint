@@ -8,8 +8,10 @@ CONF_MAC = "mac_address"
 
 # BLE
 WRITE_UUID = "0000dead-0000-1000-8000-00805f9b34fb"
+READ_UUID = "0000fef4-0000-1000-8000-00805f9b34fb"
 CMD_ON = bytearray.fromhex("6f6e00")
 CMD_OFF = bytearray.fromhex("6f666600")
+CMD_POWERSTATUS = b"powerstatus"
 
 # Canales de color
 CHANNEL_BRIGHTNESS = "A"

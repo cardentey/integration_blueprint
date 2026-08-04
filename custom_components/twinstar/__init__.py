@@ -9,6 +9,9 @@ from typing import Any
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.core import HomeAssistant, ServiceCall
 
+from datetime import timedelta
+from homeassistant.helpers.event import async_track_time_interval
+
 # Registros para buscar entidades por device_id
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import device_registry as dr
@@ -272,6 +275,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: TwinstarConfigEntry) -> 
     # Registramos el observador BLE para sincronización automática tras reinicio/corte de luz
     _setup_bluetooth_recovery_listener(hass, entry)
 
+    # Configurar consulta periódica de estado cada 5 minutos para reflejar temporizadores de hardware
+    _setup_periodic_status_poll(hass, entry)
+
     return True
 
 
@@ -314,6 +320,9 @@ def _setup_bluetooth_recovery_listener(
                             mac_address,
                         )
                     await ble_client.send_commands(commands)
+
+            if light_entity and hasattr(light_entity, "async_update_power_status"):
+                await light_entity.async_update_power_status()
 
             _LOGGER.info(
                 "Twinstar (%s): Sincronización automática de recuperación (RTC + horario + estado) completada con éxito.",
@@ -362,6 +371,23 @@ def _setup_bluetooth_recovery_listener(
     )
     entry.async_on_unload(cancel_callback)
 
+
+def _setup_periodic_status_poll(
+    hass: HomeAssistant, entry: TwinstarConfigEntry
+) -> None:
+    """Programa una consulta cada 5 minutos al hardware para detectar cambios automáticos de estado."""
+    runtime_data = entry.runtime_data
+    mac_address = runtime_data.mac_address
+
+    async def _async_poll_status(_now) -> None:
+        light_entity = runtime_data.entities.get(mac_address)
+        if light_entity and hasattr(light_entity, "async_update_power_status"):
+            await light_entity.async_update_power_status()
+
+    remove_timer = async_track_time_interval(
+        hass, _async_poll_status, timedelta(minutes=5)
+    )
+    entry.async_on_unload(remove_timer)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: TwinstarConfigEntry) -> bool:

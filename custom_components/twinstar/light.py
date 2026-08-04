@@ -79,6 +79,12 @@ class TwinstarLight(LightEntity, RestoreEntity):
         if runtime_data is not None:
             runtime_data.entities[self._mac] = self
 
+        # Programar lectura inicial del estado físico real tras arrancar
+        self.hass.async_create_background_task(
+            self.async_update_power_status(),
+            name=f"twinstar_status_init_{self._mac}",
+        )
+
     async def async_will_remove_from_hass(self) -> None:
         """Limpia la referencia al eliminar la entidad."""
         runtime_data = getattr(self._entry, "runtime_data", None)
@@ -97,6 +103,19 @@ class TwinstarLight(LightEntity, RestoreEntity):
         """Actualiza el estado on/off desde servicios externos (send_command, etc.)."""
         self._is_on = state
         self.async_write_ha_state()
+
+    async def async_update_power_status(self) -> None:
+        """Consulta por Bluetooth si la lámpara está física y realmente encendida o apagada."""
+        status = await self._ble_client.async_read_power_status()
+        if status is not None and status != self._is_on:
+            _LOGGER.info(
+                "Twinstar (%s): Estado físico actualizado a %s (anterior en HA: %s)",
+                self._mac,
+                "ENCENDIDO" if status else "APAGADO",
+                "ENCENDIDO" if self._is_on else "APAGADO",
+            )
+            self._is_on = status
+            self.async_write_ha_state()
 
     # --- Comandos ---
 
