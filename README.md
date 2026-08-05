@@ -6,6 +6,9 @@
 
 Esta integración personalizada permite controlar las pantallas LED **Twinstar Light Pro (RGBW)** directamente desde Home Assistant mediante Bluetooth (BLE).
 
+## Probada con:
+1. Twinstar V 600S
+
 ## ✨ Características
 
 * **Autodescubrimiento Bluetooth:** La integración detecta automáticamente nuevas lámparas Twinstar Light Pro en el área.
