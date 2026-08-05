@@ -11,6 +11,10 @@ Esta integración personalizada permite controlar las pantallas LED **Twinstar L
 
 ## ✨ Características
 
+<p align="center">
+  <img src="/IMG_7726.PNG" alt="Captura" width="400">
+</p>
+
 * **Autodescubrimiento Bluetooth:** La integración detecta automáticamente nuevas lámparas Twinstar Light Pro en el área.
 * **Soporte Multi-dispositivo:** Configura y controla múltiples acuarios de forma independiente.
 * **Control de Canales Individuales:** Entidades `number` para ajustar Rojo, Verde, Azul, Blanco y Brillo General (0-100%).
