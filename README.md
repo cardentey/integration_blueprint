@@ -86,7 +86,7 @@ Si Home Assistant puede comunicarse con la lámpara mediante cualquiera de estos
 - Bluetooth integrado
 - ESPHome Bluetooth Proxy
 
-aparecerá automáticamente una notificación de **"Nuevo dispositivo descubierto"** cuando la lámpara esté en modo de emparejamiento.
+aparecerá automáticamente una notificación de **"Nuevo dispositivo descubierto"**.
 
 ### Arquitectura de conexión
 
