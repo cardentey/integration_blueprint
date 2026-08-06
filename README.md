@@ -138,7 +138,7 @@ La integración configura directamente el temporizador interno y el reloj (RTC) 
     - Mantiene la pantalla apagada si corresponde al horario nocturno.
 
 - **Sincronización inteligente del estado**
-  - Al iniciar Home Assistant, después de una recuperación y cada 5 minutos, se envía el comando:
+  - Al iniciar Home Assistant, después de una recuperación y cada 5 minutos (configurable), se envía el comando:
 
 ```
 powerstatus
