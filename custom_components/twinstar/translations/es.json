@@ -22,6 +22,17 @@
       "not_twinstar_pro": "El dispositivo detectado no es una Twinstar Light Pro."
     }
   },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Opciones de Twinstar",
+        "description": "Configura la frecuencia de lectura del estado real del controlador.",
+        "data": {
+          "poll_interval": "Intervalo de consulta (minutos)"
+        }
+      }
+    }
+  },
   "services": {
     "set_schedule": {
       "name": "Programar Horario en el Controlador",

@@ -275,10 +275,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: TwinstarConfigEntry) -> 
     # Registramos el observador BLE para sincronización automática tras reinicio/corte de luz
     _setup_bluetooth_recovery_listener(hass, entry)
 
-    # Configurar consulta periódica de estado cada 5 minutos para reflejar temporizadores de hardware
+    # Configurar consulta periódica de estado configurable para reflejar temporizadores de hardware
     _setup_periodic_status_poll(hass, entry)
 
+    # Registrar listener para cuando el usuario cambie las opciones (ej. intervalo)
+    entry.async_on_unload(entry.add_update_listener(async_reload_entry))
+
     return True
+
+
+async def async_reload_entry(hass: HomeAssistant, entry: TwinstarConfigEntry) -> None:
+    """Recargar la integración al cambiar las opciones."""
+    await hass.config_entries.async_reload(entry.entry_id)
 
 
 def _setup_bluetooth_recovery_listener(
@@ -375,9 +383,13 @@ def _setup_bluetooth_recovery_listener(
 def _setup_periodic_status_poll(
     hass: HomeAssistant, entry: TwinstarConfigEntry
 ) -> None:
-    """Programa una consulta cada 5 minutos al hardware para detectar cambios automáticos de estado."""
+    """Programa una consulta periódica al hardware para detectar cambios automáticos de estado."""
+    from .const import CONF_POLL_INTERVAL, DEFAULT_POLL_INTERVAL
+    
     runtime_data = entry.runtime_data
     mac_address = runtime_data.mac_address
+    
+    poll_interval = entry.options.get(CONF_POLL_INTERVAL, DEFAULT_POLL_INTERVAL)
 
     async def _async_poll_status(_now) -> None:
         light_entity = runtime_data.entities.get(mac_address)
@@ -385,7 +397,7 @@ def _setup_periodic_status_poll(
             await light_entity.async_update_power_status()
 
     remove_timer = async_track_time_interval(
-        hass, _async_poll_status, timedelta(minutes=5)
+        hass, _async_poll_status, timedelta(minutes=poll_interval)
     )
     entry.async_on_unload(remove_timer)
 

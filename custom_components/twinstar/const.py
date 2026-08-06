@@ -5,6 +5,10 @@ from homeassistant.helpers.device_registry import DeviceInfo
 
 DOMAIN = "twinstar"
 CONF_MAC = "mac_address"
+CONF_POLL_INTERVAL = "poll_interval"
+
+# Valores por defecto de configuración
+DEFAULT_POLL_INTERVAL = 5
 
 # BLE
 WRITE_UUID = "0000dead-0000-1000-8000-00805f9b34fb"

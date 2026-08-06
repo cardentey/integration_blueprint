@@ -22,6 +22,17 @@
       "not_twinstar_pro": "The detected device is not a Twinstar Light Pro."
     }
   },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Twinstar Options",
+        "description": "Configure the polling frequency to read the actual controller state.",
+        "data": {
+          "poll_interval": "Polling interval (minutes)"
+        }
+      }
+    }
+  },
   "services": {
     "set_schedule": {
       "name": "Program Schedule in Controller",
