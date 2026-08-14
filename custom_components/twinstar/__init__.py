@@ -16,7 +16,7 @@ from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import device_registry as dr
 
-import time
+from time import monotonic as time_monotonic
 from homeassistant.components import bluetooth
 from homeassistant.components.bluetooth import (
     BluetoothCallback,
@@ -353,7 +353,7 @@ def _setup_bluetooth_recovery_listener(
         if change != BluetoothChange.ADVERTISEMENT:
             return
 
-        now = time.monotonic()
+        now = time_monotonic()
         time_since_last = now - runtime_data.last_advertisement_time
         runtime_data.last_advertisement_time = now
 
